@@ -1,0 +1,79 @@
+!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mini Hytale Mobile</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;overflow:hidden;touch-action:none;font-family:Arial}
+  canvas{display:block}
+  #ui{position:absolute;inset:0;pointer-events:none;color:#fff}
+  #crosshair{position:absolute;top:50%;left:50%;font-size:32px;transform:translate(-50%,-50%);text-shadow:0 0 10px #000}
+  #hotbar{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;background:rgba(0,0,0,0.6;padding:12px;border-radius:12px;pointer-events:all}
+  .slot{width:64px;height:64px;border:4px solid #555;border-radius:10px;background-size:cover;background-position:center;display:flex;align-items:flex-end;justify-content:flex-end;color:#fff;font-weight:bold;font-size:24px;padding:6px;text-shadow:2px 2px 4px #000}
+  .slot.selected{border-color:#fff;transform:scale(1.15)}
+  #joystick{position:absolute;left:30px;bottom:90px;width:120px;height:120px;background:rgba(255,255,255,0.15);border-radius:50%}
+  #jump{position:absolute;right:30px;bottom:90px;width:90px;height:90px;background:rgba(0,255,0,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:50px;pointer-events:all}
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="crosshair">+</div>
+  <div id="hotbar">
+    <div class="slot selected" data-block="grass" style="background-image:url(https://i.imgur.com/3z5bBZd.png)">1</div>
+    <div class="slot" data-block="dirt"  style="background-image:url(https://i.imgur.com/5p3TkmG.png)">2</div>
+    <div class="slot" data-block="stone" style="background-image:url(https://i.imgur.com/8Q5jX3P.png)">3</div>
+    <div class="slot" data-block="wood"  style="background-image:url(https://i.imgur.com/0Kx2y0Q.png)">4</div>
+    <div class="slot" data-block="sand"  style="background-image:url(https://i.imgur.com/X5y5g5Q.png)">5</div>
+  </div>
+  <div id="joystick"></div>
+  <div id="jump">JUMP</div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js'
+import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/controls/PointerLockControls.js'
+
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x87ceeb); scene.fog=new THREE.FogExp2(0x87ceeb,0.002)
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000); camera.position.set(0,8,10)
+const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement)
+const controls=new PointerLockControls(camera,renderer.domElement); scene.add(controls.getObject())
+
+scene.add(new THREE.AmbientLight(0xffffff,0.6))
+scene.add((()=>{const l=new THREE.DirectionalLight(0xffffff,0.8); l.position.set(50,100,30); return l})())
+
+const tipos={grass:0x7ec850,dirt:0x8b5e3c,stone:0x888888,wood:0x8b5a2b,sand:0xf4d03f}
+let blocoAtual='grass', mundo=new Map()
+
+function criar(x,y,z,t='grass'){const k=`\( {x}, \){y},${z}`;if(mundo.has(k))return;const m=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshLambertMaterial({color:tipos[t]}));m.position.set(x+.5,y+.5,z+.5);scene.add(m);mundo.set(k,m)}
+function destruir(x,y,z){const k=`\( {x}, \){y},${z}`;const m=mundo.get(k);if(m){scene.remove(m);mundo.delete(k)}}
+
+// Mundo
+for(let x=-30;x<30;x++)for(let z=-30;z<30;z++){criar(x,0,z,'grass');criar(x,-1,z,'dirt');criar(x,-2,z,'dirt');criar(x,-3,z,'stone')}
+for(let i=0;i<30;i++){let x=Math.floor(Math.random()*50)-25,z=Math.floor(Math.random()*50)-25,h=5+Math.floor(Math.random()*4);for(let y=1;while(y<=h)criar(x,y++,z,'wood');for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++)if(Math.abs(dx)+Math.abs(dz)<4)criar(x+dx,h+1,z+dz,'grass')}
+
+// Controles mobile
+let mx=0,mz=0,vy=0,podePular=true
+const joy=nipplejs.create({zone:document.getElementById('joystick'),mode:'static',position:{left:'90px',bottom:'90px'},color:'white'})
+joy.on('move',(e,d)=>{mx=d.vector.x*0.3;mz=-d.vector.y*0.3});joy.on('end',()=>{mx=mz=0})
+document.getElementById('jump').ontouchstart=e=>{e.preventDefault();if(podePular)vy=0.3}
+
+// Quebrar/colocar
+let timer
+renderer.domElement.ontouchstart=e=>{e.preventDefault();timer=setTimeout(()=>ray(2),500)}
+renderer.domElement.ontouchend=e=>{e.preventDefault();clearTimeout(timer);ray(0)}
+function ray(b){const r=new THREE.Raycaster();r.setFromCamera(new THREE.Vector2(0,0),camera);const h=r.intersectObjects(Array.from(mundo.values()));if(!h.length)return;const p=h[0].object.position.clone().sub(new THREE.Vector3(.5,.5,.5)).floor();b===0?destruir(p.x,p.y,p.z):criar(p.x+h[0].face.normal.x,p.y+h[0].face.normal.y,p.z+h[0].face.normal.z,blocoAtual)}
+
+// Hotbar
+document.querySelectorAll('.slot').forEach(s=>s.onclick=()=>{document.querySelector('.selected').classList.remove('selected');s.classList.add('selected');blocoAtual=s.dataset.block})
+
+// Loop
+function loop(){requestAnimationFrame(loop);vy-=0.02;controls.moveRight(mx);controls.moveForward(mz);controls.getObject().position.y+=vy;if(controls.getObject().position.y<2){vy=0;controls.getObject().position.y=2;podePular=true}renderer.render(scene,camera)}
+loop()
+
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)})
+</script>
+<script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.0/dist/nipplejs.min.js"></script>
+</body>
+</html>
